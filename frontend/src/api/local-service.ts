@@ -1,5 +1,6 @@
 import { MODULE_BY_KEY } from '@/data/modules'
-import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
+import { allRows, listRows, resetRows, saveRows, seedModuleRows } from '@/data/local-store'
+import { CCTV_DEMO_ID_FIELD, CCTV_DEMO_KEY, CCTV_DEMO_ROWS } from '@/data/cctv-demo'
 import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
 
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
@@ -26,6 +27,47 @@ export function filterRows(rows: EntryRow[], filters: Record<string, string>): E
 export function listEntries(key: string, filters: Record<string, string> = {}): PageResult {
   const matched = filterRows(listRows(key), filters)
   return { items: matched, total: matched.length, page: 1, size: matched.length }
+}
+
+export function getEntry(key: string, id: number): EntryRow | null {
+  return listRows(key).find((row) => Number(row.id) === Number(id)) ?? null
+}
+
+export type CctvSeedResult = {
+  ok: boolean
+  message: string
+  changed: boolean
+  total: number
+  pending: number
+  backedUp: boolean
+  backupCount: number
+  backupKey: string
+}
+
+// 一键播种管道内窥检测演示数据：
+// 幂等——已经是这套演示数据时只回读不写盘；真实记录先备份再覆盖；
+// 任何一步失败都由调用方原样提示，重新执行本方法不会产生重复记录。
+export function seedCctvDemo(): CctvSeedResult {
+  const meta = moduleMeta(CCTV_DEMO_KEY)
+  const result = seedModuleRows(CCTV_DEMO_KEY, CCTV_DEMO_ROWS, CCTV_DEMO_ID_FIELD)
+  const pending = result.rows.filter((row) => String(row.status) === '待检测').length
+  const backupNote = result.backedUp
+    ? `，原有 ${result.backupCount} 条真实记录已备份到浏览器存储「${result.backupKey}」`
+    : result.backupCount > 0
+      ? `，原有真实记录的备份（${result.backupCount} 条）保留在「${result.backupKey}」`
+      : ''
+  return {
+    ok: true,
+    message: result.changed
+      ? `演示数据已就绪：${meta.name}共 ${result.rows.length} 条，其中待检测 ${pending} 条${backupNote}`
+      : `演示数据已就绪（本次无改动）：${meta.name}共 ${result.rows.length} 条，其中待检测 ${pending} 条${backupNote}`,
+    changed: result.changed,
+    total: result.rows.length,
+    pending,
+    backedUp: result.backedUp,
+    backupCount: result.backupCount,
+    backupKey: result.backupKey,
+  }
 }
 
 export function runAction(key: string, id: number, action: string): ActionResult {
