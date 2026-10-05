@@ -32,6 +32,17 @@ export type ActionResult = {
   message: string
 }
 
+export type SeedResult = ActionResult & {
+  total: number
+  pending: number
+  backedUp: boolean
+}
+
+export type BackupSnapshot = {
+  savedAt: string
+  rows: Record<string, EntryRow[]>
+}
+
 export type OverviewResult = {
   cards: { label: string; value: number }[]
   modules: { name: string; created: number; pending: number; abnormal: number }[]

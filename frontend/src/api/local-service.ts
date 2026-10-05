@@ -1,6 +1,7 @@
 import { MODULE_BY_KEY } from '@/data/modules'
-import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
-import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
+import { allRows, backupRows, listRows, replaceAllRows, resetRows, saveRows } from '@/data/local-store'
+import { SEED_ROWS } from '@/data/seed'
+import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult, SeedResult } from '@/data/types'
 
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
 const NEGATIVE_ACTIONS = ['撤销', '作废', '拒绝', '驳回', '停用', '忽略', '下线', '回滚']
@@ -26,6 +27,63 @@ export function filterRows(rows: EntryRow[], filters: Record<string, string>): E
 export function listEntries(key: string, filters: Record<string, string> = {}): PageResult {
   const matched = filterRows(listRows(key), filters)
   return { items: matched, total: matched.length, page: 1, size: matched.length }
+}
+
+export function getEntry(key: string, id: number): EntryRow | null {
+  const row = listRows(key).find((item) => Number(item.id) === id)
+  return row ? { ...row } : null
+}
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+// 键序无关的稳定序列化：用来判断现有数据是否就是演示初始态，避免重复播种时反复备份。
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+      a.localeCompare(b),
+    )
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+// 一键播种：把全部模块复位到演示初始态（内窥检测含检测编号、缺陷等级、缺陷位置）。
+// 覆盖前先备份现有记录；整体替换而非追加，所以反复执行、失败后重试都不会写重。
+export function seedDemoData(): SeedResult {
+  const meta = moduleMeta('cctvinspect')
+  try {
+    const target = clone(SEED_ROWS)
+    const current = allRows()
+    const backedUp = stableStringify(current) !== stableStringify(target)
+    if (backedUp) {
+      backupRows(current)
+    }
+    replaceAllRows(target)
+    const seeded = listRows(meta.key)
+    const pending = seeded.filter((row) => row.pending).length
+    return {
+      ok: true,
+      message: backedUp
+        ? `已备份原有记录，${meta.name}等模块已复位到演示初始态`
+        : `${meta.name}等模块已复位到演示初始态`,
+      total: seeded.length,
+      pending,
+      backedUp,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      message: `播种失败：${error instanceof Error ? error.message : '浏览器存储不可用'}，可重试`,
+      total: 0,
+      pending: 0,
+      backedUp: false,
+    }
+  }
 }
 
 export function runAction(key: string, id: number, action: string): ActionResult {

@@ -69,3 +69,6 @@ npm run build
   `frontend/src/data/seed.ts`。
 - 状态流转只允许在 `local-service.ts` 里改，页面组件不做业务判断。
 - 想回到初始数据：清掉浏览器里 `drainage-pump:entries` 这一项，或调用 `resetModule(模块)`。
+- 管道内窥检测页提供「一键播种演示数据」：把各模块复位到初始演示数据（内窥检测含检测编号、
+  检测管段、缺陷等级、缺陷位置），覆盖前会把现有记录备份到 `drainage-pump:entries:backup`；
+  播种是整体替换而非追加，反复执行或失败后重试都不会写重。
